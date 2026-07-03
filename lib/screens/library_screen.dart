@@ -909,7 +909,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     : null,
                 filled: true,
                 fillColor: Colors.black.withOpacity(0.2),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 12.0,
+                  horizontal: 20.0,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(30.0),
                   borderSide: BorderSide.none,
