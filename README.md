@@ -158,3 +158,19 @@ This application was developed using **Antigravity** (Google DeepMind's agentic 
 
 - **File Formats:** While the backend database is prepared to register both PDF and EPUB content types, the client-side reader (`syncfusion_flutter_pdfviewer`) only renders PDFs. For EPUBs, it acts as a catalog manager (allowing upload, download, search, and deletion).
 - **SQLite Database:** The SQLite3 database is file-based and resides inside the backend local directory. Running the app in a stateless environment (like Heroku or Docker containers without persistent volumes) will reset data on restarts.
+
+---
+
+## Visual Showcase
+
+| Bookshelf View (Home Library) | PDF Reader Screen |
+| :---: | :---: |
+| ![Bookshelf View](screenshots/bookshelf_preview.png) | ![PDF Reader Screen](screenshots/reader_screen.png) |
+
+| Search Query Highlights | Upload Dialog & Cover Selector |
+| :---: | :---: |
+| ![Search Highlight](screenshots/search_highlight.png) | ![Upload Dialog](screenshots/upload_dialog.png) |
+
+| Download Progress Banner | Delete Confirmation Alert |
+| :---: | :---: |
+| ![Download Progress](screenshots/download_progress.png) | ![Delete Confirmation](screenshots/delete_confirmation.png) |
