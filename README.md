@@ -2,6 +2,8 @@
 
 An end-to-end product implementation for the **Sagar Fab International Company** Full Stack Developer Assignment. It features a **Ruby on Rails 8 API backend** with Active Storage and a **Flutter 3 client app** showcasing a premium, classic wooden Bookshelf UI inspired by the older iOS ebook library.
 
+![Library Bookshelf Preview](screenshots/bookshelf_preview.png)
+
 ---
 
 ## Tech Stack
