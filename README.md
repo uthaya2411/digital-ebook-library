@@ -2,7 +2,7 @@
 
 An end-to-end product implementation for the **Sagar Fab International Company** Full Stack Developer Assignment. It features a **Ruby on Rails 8 API backend** with Active Storage and a **Flutter 3 client app** showcasing a premium, classic wooden Bookshelf UI inspired by the older iOS ebook library.
 
-![Library Bookshelf Preview](screenshots/bookshelf_preview.png)
+<img src="screenshots/bookshelf_preview.png" width="450" alt="Library Bookshelf Preview" />
 
 ---
 
@@ -164,13 +164,13 @@ This application was developed using **Antigravity** (Google DeepMind's agentic 
 ## Visual Showcase
 
 | Bookshelf View (Home Library) | PDF Reader Screen |
-| :---: | :---: |
-| ![Bookshelf View](screenshots/bookshelf_preview.png) | ![PDF Reader Screen](screenshots/reader_screen.png) |
+| :--- | :--- |
+| <img src="screenshots/bookshelf_preview.png" width="280" alt="Bookshelf View" /> | <img src="screenshots/reader_screen.png" width="280" alt="PDF Reader Screen" /> |
 
 | Search Query Highlights | Upload Dialog & Cover Selector |
-| :---: | :---: |
-| ![Search Highlight](screenshots/search_highlight.png) | ![Upload Dialog](screenshots/upload_dialog.png) |
+| :--- | :--- |
+| <img src="screenshots/search_highlight.png" width="280" alt="Search Highlight" /> | <img src="screenshots/upload_dialog.png" width="280" alt="Upload Dialog" /> |
 
 | Download Progress Banner | Delete Confirmation Alert |
-| :---: | :---: |
-| ![Download Progress](screenshots/download_progress.png) | ![Delete Confirmation](screenshots/delete_confirmation.png) |
+| :--- | :--- |
+| <img src="screenshots/download_progress.png" width="280" alt="Download Progress" /> | <img src="screenshots/delete_confirmation.png" width="280" alt="Delete Confirmation" /> |
