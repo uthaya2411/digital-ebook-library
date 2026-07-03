@@ -163,14 +163,8 @@ This application was developed using **Antigravity** (Google DeepMind's agentic 
 
 ## Visual Showcase
 
-| Bookshelf View (Home Library) | PDF Reader Screen |
-| :--- | :--- |
-| <img src="screenshots/bookshelf_preview.png" width="280" alt="Bookshelf View" /> | <img src="screenshots/reader_screen.png" width="280" alt="PDF Reader Screen" /> |
-
-| Search Query Highlights | Upload Dialog & Cover Selector |
-| :--- | :--- |
-| <img src="screenshots/search_highlight.png" width="280" alt="Search Highlight" /> | <img src="screenshots/upload_dialog.png" width="280" alt="Upload Dialog" /> |
-
-| Download Progress Banner | Delete Confirmation Alert |
-| :--- | :--- |
-| <img src="screenshots/download_progress.png" width="280" alt="Download Progress" /> | <img src="screenshots/delete_confirmation.png" width="280" alt="Delete Confirmation" /> |
+| Bookshelf View (Home Library) | PDF Reader Screen | Search Query Highlights |
+| :---: | :---: | :---: |
+| <img src="screenshots/bookshelf_preview.png" width="220" alt="Bookshelf View" /> | <img src="screenshots/reader_screen.png" width="220" alt="PDF Reader Screen" /> | <img src="screenshots/search_highlight.png" width="220" alt="Search Highlight" /> |
+| **Upload Dialog & Cover Selector** | **Download Progress Banner** | **Delete Confirmation Alert** |
+| <img src="screenshots/upload_dialog.png" width="220" alt="Upload Dialog" /> | <img src="screenshots/download_progress.png" width="220" alt="Download Progress" /> | <img src="screenshots/delete_confirmation.png" width="220" alt="Delete Confirmation" /> |
