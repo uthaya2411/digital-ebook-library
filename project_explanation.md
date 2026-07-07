@@ -1,171 +1,92 @@
-# Digital Ebook Library Application - Exhaustive Architecture Blueprint & Code Walkthrough
+# Digital Ebook Library Application - Engineering Design & Product Reasoning
 
-This document provides a highly detailed file-by-file code walkthrough mapping out the technologies, design patterns, state variables, classes, and methods implemented in the application.
+This document outlines the core technical architecture, design patterns, and **product reasoning** behind the implementation choices for the Digital Ebook Library Application.
 
 ---
 
-## 1. System Architecture Overview & Tech Stack
+## 1. System Architecture & Tech Stack Decisions
 
-The application uses an API-first, client-server model. The backend serves structured JSON metadata and streams raw file binaries, while the client app manages local file caching, reading state progress, and user interactions.
+The system is separated into a Rails API backend and a Flutter client app. This clean separation of concerns ensures that either component can be upgraded, rewritten, or scaled independently.
 
 ```mermaid
 graph TD
     subgraph Client [Flutter Client App]
-        UI[LibraryScreen]
-        Reader[ReaderScreen]
-        Upload[UploadDialog]
-        SP[SharedPreferences]
-        API_S[ApiService]
+        UI[Home Dashboard / Bookshelf]
+        Reader[SfPdfViewer Reader Screen]
+        Upload[Upload Dialog Widget]
+        SP[SharedPreferences Cache]
+        API_S[ApiService HTTP Client]
     end
 
     subgraph Server [Ruby on Rails 8 API]
         Controller[EbooksController]
         Model[Ebook Model]
         Parser[pdf-reader Gem]
-        ActiveStorage[Active Storage]
-        SQLite[SQLite3 DB]
+        ActiveStorage[Active Storage Disk Service]
+        SQLite[SQLite3 Database]
     end
 
-    UI -->|JSON requests| Controller
-    Upload -->|Multipart POST| Controller
-    Controller -->|Query| SQLite
-    Controller -->|Read/Write Blobs| ActiveStorage
-    Parser -->|Parse /Title & /Author| Model
-    Reader -->|Stream bytes| ActiveStorage
-    SP <-->|Read/Write Page Index & Recent IDs| UI
+    UI -->|1. List / Search / Delete| Controller
+    Upload -->|2. Multipart POST File| Controller
+    Controller -->|3. Save metadata| SQLite
+    Controller -->|4. Store Binary Blob| ActiveStorage
+    Parser -->|5. Auto-parse PDF Title/Author| Model
+    Reader -->|6. Check offline cache / stream| ActiveStorage
+    SP <-->|7. Retrieve page position / continue reading queue| UI
 ```
 
----
+### **1.1. Why Rails API Mode?**
+*   **Reasoning:** Generating HTML templates server-side (using Rails ERB/Hotwire) binds the backend strictly to web views. Using Rails in API-only mode (`--api`) forces the backend to output clean, structured JSON payloads. This permits the Flutter app (or any future web/desktop client) to consume database attributes via standardized endpoints.
 
-## 2. Backend Implementation (Ruby on Rails 8)
+### **1.2. Why SQLite3?**
+*   **Reasoning:** SQLite3 is file-based and requires zero background database server installation (unlike PostgreSQL or MySQL). For a coding assignment meant to be evaluated locally on different developer machines, SQLite3 guarantees that running `bin/rails db:migrate` works immediately without configuration issues.
 
-### **2.1. Ebook Database Model**
-*   **File Path:** [ebook.rb](file:///Users/uthai/Projects/flutter/projects/scottinternational/backend/app/models/ebook.rb)
-*   **Technologies:** ActiveRecord, Active Storage, `pdf-reader` Gem.
-*   **Engineering Patterns:** Callback Lifecycle, Declarative Validations, Defensive Programming.
-*   **Detailed Class Walkthrough:**
-    *   `has_one_attached :file`: Connects the record to the Active Storage attachment blob manager (PDF or EPUB binary).
-    *   `has_one_attached :cover_image`: Connects the record to an optional image attachment (JPEG/PNG/WebP) to override the default gradient cover.
-    *   **Validations:**
-        *   `validates :title, presence: true`: Ensures every record has a title for database querying consistency.
-        *   `validate :file_presence`: Verifies that an attachment is uploaded during record creation.
-        *   `validate :file_format_and_size`: Checks the metadata of the attached file. Rejects files larger than 50MB and limits MIME types strictly to `application/pdf` and `application/epub+zip`.
-    *   **Callbacks:**
-        *   `before_validation :extract_pdf_metadata, on: :create`: Evaluates the attachment in the temporary upload cache. If it is a PDF and the user has not typed a custom Title/Author, it initiates `PDF::Reader` in memory, extracts the internal `/Title` and `/Author` tags, and auto-fills the model.
-        *   `before_validation :generate_cover_colors, on: :create`: Selects a start and end hex color from a predefined palette of gradients (e.g. mahogany, teal, navy) and saves them, establishing a dynamic cover fallback.
-    *   **Helper Methods:**
-        *   `as_json(options)`: Overrides default serialization. Automatically appends absolute Rails URLs for both file downloads (`download_url`) and cover images (`cover_url`), letting the client access binaries directly.
+### **1.3. Why Active Storage?**
+*   **Reasoning:** Instead of writing custom file-upload path handlers and disk cleanup jobs, Active Storage abstractly handles binary streaming out-of-the-box. It links file attachments directly with ActiveRecord lifecycle transactions and easily abstracts transitioning from local disk storage to cloud providers (like Amazon S3 or Google Cloud Storage) via a simple YAML configuration change.
 
 ---
 
-### **2.2. Ebooks API Controller**
-*   **File Path:** [ebooks_controller.rb](file:///Users/uthai/Projects/flutter/projects/scottinternational/backend/app/controllers/api/ebooks_controller.rb)
-*   **Technologies:** Rails ActionController, Active Storage Blob URLs, Database Query Filters.
-*   **Engineering Patterns:** RESTful Action Mapping, Parameter Whitelisting (Strong Params).
-*   **Detailed Controller Methods Walkthrough:**
-    *   `index`: Retrieves books. It reads parameters:
-        *   `params[:q]`: Filters database records by title, author, or original filename (using SQL `LIKE` keywords).
-        *   `params[:file_type]`: Filters records by PDF (`application/pdf`) or EPUB (`application/epub+zip`) MIME types.
-        *   `params[:sort_by]` & `params[:sort_order]`: Dynamically orders records (e.g., sorting by recently uploaded, alphabetical author, or title).
-    *   `show`: Returns the JSON representation of a single ebook metadata model.
-    *   `create`: Sanitizes parameters using `ebook_params` (Strong Parameters), saves the file, runs metadata extraction in the model transaction, and returns a `201 Created` payload.
-    *   `download`: Retrieves the Active Storage file and streams the binary to the client using `send_data` with inline or attachment disposition, allowing download chunk progress tracking.
-    *   `destroy`: Triggers model deletion. Cleans up the database row and purges the file from disk storage.
+## 2. Backend Logic Rationale
+
+### **2.1. File Size Constraints (50MB Limit)**
+*   **Reasoning:** Large PDF/EPUB documents cause HTTP request timeouts and bloat local server disk storage. Enforcing a strict 50MB limit maintains database responsiveness while easily accommodating standard text-heavy novels and document textbooks.
+
+### **2.2. Automated PDF Metadata Extraction**
+*   **Reasoning (Reducing Cognitive Load):** Manual data entry is a point of friction. Users uploading files in bulk do not want to type titles and authors for every document. By reading the PDF's header metadata stream in memory using `pdf-reader` during upload, the backend automatically defaults the Title and Author, letting the user upload files in one click.
+*   **Fallback Strategy:** If the PDF file lacks internal tags, the backend defaults to the clean file name and `"Unknown Author"` instead of failing or leaving fields blank, ensuring the library listings remain consistent.
+
+### **2.3. Dynamic Cover Spine Gradients vs. Server Image Rendering**
+*   **The Trade-Off:** Standard ebook library apps try to render the first page of a PDF as a cover thumbnail. However, doing so server-side requires native Unix rendering packages (such as Ghostscript, Poppler, or MuPDF) wrapped in ImageMagick. These libraries are notoriously difficult to compile locally on target machines and significantly slow down upload times.
+*   **Our Decision:** The backend automatically generates two matching color hex gradients (e.g. `cover_color_start` and `cover_color_end`) when a record is saved. The client app uses these hex values to render a gorgeous 3D leather-spine cover dynamically in Flutter. This is fast, has zero operating system dependencies, compiles instantly on any machine, and gives the bookshelf a cohesive, visual aesthetic.
+*   *Custom Overrides:* If a user prefers a custom cover image, the API supports an optional `cover_image` multipart attachment, rendering the image dynamically on the card via `Image.network` with smooth loading shimmer indicators.
 
 ---
 
-## 3. Frontend Implementation (Flutter 3)
+## 3. Frontend UX & Design Decisions
 
-### **3.1. Network Client Service**
-*   **File Path:** [api_service.dart](file:///Users/uthai/Projects/flutter/projects/scottinternational/lib/services/api_service.dart)
-*   **Technologies:** Dart `http` package, `path_provider` directory handlers.
-*   **Engineering Patterns:** Service Locator, Async Data Streaming.
-*   **Detailed Method Walkthrough:**
-    *   `fetchEbooks(...)`: Serializes sorting, filtering, and query strings, executes a `GET` request to `/api/ebooks`, and returns a mapped list of Dart `Ebook` models.
-    *   `uploadEbook(...)`: Coordinates multipart form uploads. Constructs an `http.MultipartRequest` post stream, attaches the PDF/EPUB document and optional cover image byte streams, appends text parameter strings, and executes the network request.
-    *   `downloadEbook(...)`: Downloads a file. It initiates an HTTP `GET` to `/api/ebooks/:id/download` and reads the raw byte stream chunks. For each chunk received:
-        - Calculates current progress ratio: `bytesDownloaded / totalContentLength`.
-        - Triggers the visual UI progress callback function inside the client screen.
-        - Writes completed bytes to the device's documentation folders (`ApplicationDocumentsDirectory`).
-    *   `deleteEbook(id)`: Sends a `DELETE` request to clear the database entry on the backend.
+### **3.1. The 3D Mahogany Bookshelf UI**
+*   **Reasoning:** A simple grid of list items feels plain and lacks character. By designing a visual bookshelf layout with mahogany wood panels, dynamic gradients, spine borders, paper-fold shadows, and glassmorphic top headers, we evoke iBooks-style visual nostalgia. This turns catalog management into an engaging, tactile experience.
+*   **Empty State Onboarding:** A completely blank library can make users feel like the app is empty or broken. When no books exist, the app renders empty shelves with a translucent overlay containing clear onboarding prompts. This guides the user on how to populate their shelf immediately.
 
----
+### **3.2. "Continue Reading" Horizontal Slider**
+*   **Reasoning (User Path Optimization):** Ebook readers rarely finish a book in one sitting, and they usually cycle between 2 or 3 active books. Forcing the user to scroll through a library of 100+ items to find their active read creates friction. Pinned at the top of the dashboard, the "Continue Reading" slider displays the top 5 recently read books, letting users resume reading in a single tap immediately upon booting the app.
 
-### **3.2. Library Screen (The Dashboard)**
-*   **File Path:** [library_screen.dart](file:///Users/uthai/Projects/flutter/projects/scottinternational/lib/screens/library_screen.dart)
-*   **Technologies:** Material 3, SharedPreferences, Custom Switch Router.
-*   **Engineering Patterns:** Observer/Listener, Debounced Typing, Responsive Row Containment.
-*   **State Variables Walkthrough:**
-    *   `List<Ebook> _ebooks`: Stores the complete list of books fetched from the server.
-    *   `bool _isLoading`: Triggers the global circular loading state.
-    *   `String _searchQuery`: Stores the active search query.
-    *   `String _sortBy`: Stores the active sort column (default: `"recent"`).
-    *   `String _sortOrder`: Stores the active sort direction (default: `"desc"`).
-    *   `String _fileTypeFilter`: Stores the active format filter (`"all"`, `"pdf"`, or `"epub"`).
-    *   `List<Ebook> _recentlyReadEbooks`: Stores up to 5 book models fetched and ordered by recently read indices in local storage.
-    *   `_ReaderDownloadProgress? _downloadState`: Holds references to the active downloading book ID and percentage value for rendering the bottom loader banner.
-*   **Core Methods Walkthrough:**
-    *   `_fetchBooks()`: Invokes `ApiService.fetchEbooks()` using the active state search, sort, and filter variables, then triggers `_loadRecentlyRead()`.
-    *   `_onSearchChanged(query)`: Listens to text entries inside the search search field. Instantiates a 500ms `Timer` to debounce queries, cancelling previous timers on keystrokes to prevent database request storms.
-    *   `_openReader(ebook)`: Reads the local `recently_read_books` SharedPreferences StringList, moves the selected book ID to index `0`, limits the list to `5` items, and saves it. Navigates to `ReaderScreen` and calls `_loadRecentlyRead()` on return to update the slider immediately.
-    *   `_loadRecentlyRead()`: Reads saved IDs from SharedPreferences and filters the loaded `_ebooks` list to match them.
-    *   `_buildRecentlyReadSection()`: Renders the horizontal **"Continue Reading"** slider. Displays small, spine-less book cards, authors, titles, and format badges inside a horizontally scrolling `ListView`.
-    *   `_downloadBook(ebook)`: Triggers `ApiService.downloadEbook()`. Sets the active download progress state to render the bottom progress banner. If successful, clears the banner and displays a green SnackBar with a **READ NOW** action button.
-    *   `_confirmDelete(ebook)`: Spawns an `AlertDialog` warning that deletion is permanent. Tapping **Delete** triggers `_deleteBook(ebook)`.
-    *   `_deleteBook(ebook)`: Calls `ApiService.deleteEbook()`, removes the local downloaded file (if cached), updates the list via `_fetchBooks()`, and clears the book from the "recently read" list.
+### **3.3. Last Read Page Memory**
+*   **Reasoning:** Readers hate losing their place. Storing the page progress locally in `SharedPreferences` (keyed by book ID) on page changes. This represents a lightweight, high-performance approach that bypasses database writes. It guarantees page memory works completely offline and restores progress under 100ms when reopening a book.
+
+### **3.4. Smart Offline Caching**
+*   **Reasoning:** Ebooks are frequently read on the go (subways, planes) where internet connections are spotty or non-existent. When a user opens a book, the app checks if the binary exists in the device's local documents folder. If present, it loads the file locally, saving mobile data and battery while bypassing network latency.
+
+### **3.5. Search Debouncing (500ms Delay)**
+*   **Reasoning:** Listening to search text changes and querying the API on every single keystroke causes "HTTP request storms." If a user types "Gatsby" (6 characters), it fires 6 queries in less than a second, causing layout flickering on the client and database locking on the server. Debouncing waits for the user to pause typing before sending a single HTTP request, optimizing system performance.
+
+### **3.6. Grid/List Layout Card Overflow Protection**
+*   **Vertical Overflow Fix:** On small screen scales (like detail bottom-sheets or list view thumbnails with a height < 100), displaying titles and authors causes vertical RenderFlex overflows. We set card height checks to automatically hide cover text on smaller scales, keeping visual layout badges clean and stable.
+*   **Horizontal Overflow Fix:** In `ListView`, metadata elements (format, file size, upload date) can exceed screen width on narrow devices. We replaced a static `Row` with a responsive `Wrap` widget to prevent horizontal pixel overflows on narrow devices.
 
 ---
 
-### **3.3. PDF Reader Screen**
-*   **File Path:** [reader_screen.dart](file:///Users/uthai/Projects/flutter/projects/scottinternational/lib/screens/reader_screen.dart)
-*   **Technologies:** `syncfusion_flutter_pdfviewer`, SharedPreferences, Path Provider, Fullscreen System Overlays.
-*   **Engineering Patterns:** Navigation Lifecycle Hooks, Repository Caching.
-*   **State Variables Walkthrough:**
-    *   `late PdfViewerController _pdfViewerController`: Controls canvas scale attributes and page navigation coordinates.
-    *   `bool _isLoading`: Renders reading indicators during file loading.
-    *   `bool _isLocal`: Tracks if the file is loaded from device local storage or remote stream.
-    *   `File? _localFile`: Holds the local document file pointer.
-    *   `int _currentPage` & `_totalPages`: Stores page counts.
-    *   `bool _isFullscreen`: Controls visibility of toolbar overlays.
-    *   `double _zoomLevel`: Stores current page zoom magnification scale.
-*   **Core Methods Walkthrough:**
-    *   `_checkLocalFileAndLoad()`: Resolves target filenames in the app documents directory. If the file exists, updates `_localFile` and set `_isLocal = true` to load from disk. Otherwise, streams from the remote URL.
-    *   `_restoreLastReadPosition()`: Reads the page index saved under `ebook_read_position_[id]` from SharedPreferences. If present and valid, jumps to that page and shows a resume SnackBar.
-    *   `_saveReadPosition(page)`: Runs inside `onPageChanged` page listener hooks to write the active page number back to `SharedPreferences` instantly.
-    *   `_isFullscreen` triggers: Uses `SystemChrome.setEnabledSystemUIMode` to hide system status bars and navigation panels, giving a spacious reading view.
-    *   `_zoomIn()` / `_zoomOut()` / `_resetZoom()`: Modifies `_pdfViewerController.zoomLevel` between `1.0` and `3.0` constraints.
-    *   `_showJumpToPageDialog()`: Prompts an overlay input dialog allowing users to enter a page number and jump there via `_pdfViewerController.jumpToPage(page)`.
+## 4. Testing Philosophy
 
----
-
-### **3.4. Custom Painted Bookshelf UI**
-*   **File Path:** [bookshelf_view.dart](file:///Users/uthai/Projects/flutter/projects/scottinternational/lib/widgets/bookshelf_view.dart)
-*   **Pattern:** Layout Partitioning, Math Constraints.
-*   **Core Logic Walkthrough:**
-    *   `build(BuildContext context)`: Computes the screen width. Resolves how many books fit in a single row (using dynamic columns math: `cols = max(2, width ~/ 110.0)`).
-    *   Renders a stack:
-        1.  **Background Wall:** A dark wood-grain mahogany asset pattern container.
-        2.  **Shelves List:** A `ListView.builder` that partitions the books list into rows. Under each row, it draws a wooden shelf board using linear gradients, borders, and dark shadow drops to create a 3D effect.
-
----
-
-### **3.5. 3D Ebook Cover Card Widget**
-*   **File Path:** [ebook_card.dart](file:///Users/uthai/Projects/flutter/projects/scottinternational/lib/widgets/ebook_card.dart)
-*   **Pattern:** Visual Shading Decorator, Constraint Boundaries.
-*   **Core Logic Walkthrough:**
-    *   Draws a 3D book cover:
-        - Uses a `BoxDecoration` containing a `LinearGradient` mapped from the book's `coverColorStart` and `coverColorEnd` database hex values.
-        - Adds a dark left shadow border to represent a leather book spine.
-        - Adds a translucent white glossy layer to simulate page fold sheen reflections.
-    *   **Vertical Containment Bounds:** If the card height is smaller than `100.0` (as in small list views or detail sheets), it hides the title and author texts. This prevents `RenderFlex` layout overflows on small preview dialogs.
-
----
-
-### **3.6. Highlighted Text Search Matcher**
-*   **File Path:** [highlighted_text.dart](file:///Users/uthai/Projects/flutter/projects/scottinternational/lib/widgets/highlighted_text.dart)
-*   **Pattern:** Regular Expression Tokenizer.
-*   **Core Logic Walkthrough:**
-    *   If the `query` string is empty, returns a standard `Text` widget.
-    *   If a search query is present, it constructs a case-insensitive regular expression: `RegExp(query, caseSensitive: false)`.
-    *   Uses `allMatches(text)` to find all matching text blocks.
-    *   Splits the text string into match segments and non-match segments. Non-match segments are rendered as normal white text, while matching blocks are wrapped inside a `TextSpan` styled with a teal background color, lighting up matches dynamically.
+*   **Backend integration tests (`rails test`):** Rather than unit testing simple data models, we focus on API integrations. Tests mock multipart uploads, file formats validations, download binaries streaming, and cascade deletions. This guarantees endpoint contracts never break.
+*   **Frontend widget tests (`flutter test`):** Rather than testing state frameworks, we focus on visual stability. Tests verify text debouncers, search bar clear buttons, empty bookshelf layout rendering, and delete dialog confirmations.
